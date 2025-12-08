@@ -103,10 +103,12 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
 import android.util.Size
 import androidx.activity.enableEdgeToEdge
+import top.yukonga.miuix.kmp.icon.icons.useful.Edit
 import java.io.File
 
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
+    private var switchToLogsTab: (() -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -117,16 +119,25 @@ class MainActivity : ComponentActivity() {
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
             val topBarState = rememberTopAppBarState()
             val scrollBehavior = MiuixScrollBehavior(state = topBarState)
+            var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+            switchToLogsTab = { selectedTab = 1 }
 
             MiuixTheme(controller = controller) {
                 MainScreen(
                     uiState = uiState,
                     onUrlChange = viewModel::updateUrl,
-                    onDownload = { ensureStoragePermission { viewModel.startDownload { showToast(it) } } },
+                    onDownload = {
+                        ensureStoragePermission {
+                            selectedTab = 1
+                            viewModel.startDownload { showToast(it) }
+                        }
+                    },
                     onCopyText = { ensureStoragePermission { viewModel.copyDescription({ showToast("已复制文案") }, { showToast(it) }) } },
                     onOpenSettings = { startActivity(Intent(this, SettingsActivity::class.java)) },
                     onOpenWeb = { openWebCrawl(uiState.urlInput) },
                     onMediaClick = { openFile(it) },
+                    selectedTab = selectedTab,
+                    onTabChange = { selectedTab = it },
                     scrollBehavior = scrollBehavior,
                     versionLabel = "v${BuildConfig.VERSION_NAME}"
                 )
@@ -236,6 +247,7 @@ class MainActivity : ComponentActivity() {
             val urls = data.getStringArrayListExtra("image_urls") ?: emptyList()
             val content = data.getStringExtra("content_text")
             if (urls.isNotEmpty()) {
+                switchToLogsTab?.invoke()
                 viewModel.onWebCrawlResult(urls, content)
             } else {
                 showToast("未发现可下载的资源")
@@ -259,18 +271,19 @@ private fun MainScreen(
     onOpenSettings: () -> Unit,
     onOpenWeb: () -> Unit,
     onMediaClick: (MediaItem) -> Unit,
+    selectedTab: Int,
+    onTabChange: (Int) -> Unit,
     scrollBehavior: ScrollBehavior,
     versionLabel: String
     ) {
     val statusListState = rememberLazyListState()
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(uiState.status.size, selectedTab) {
         if (uiState.status.isNotEmpty() && selectedTab == 1) {
             statusListState.animateScrollToItem(uiState.status.lastIndex)
         }
     }
     val navItems = listOf(
-        NavigationItem("主页", MiuixIcons.Useful.NavigatorSwitch),
+        NavigationItem("操作", MiuixIcons.Useful.Edit),
         NavigationItem("日志", MiuixIcons.Useful.Info),
         NavigationItem("下载", MiuixIcons.Useful.Save)
     )
@@ -299,7 +312,7 @@ private fun MainScreen(
             NavigationBar(
                 items = navItems,
                 selected = selectedTab,
-                onClick = { selectedTab = it }
+                onClick = { onTabChange(it) }
             )
         }
     ) { padding ->
@@ -428,28 +441,6 @@ private fun HomePage(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-                if (uiState.progressLabel.isNotEmpty() || uiState.isDownloading) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(MiuixTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(text = "进度")
-                                Text(text = uiState.progressLabel.ifEmpty { "--" }, color = Color.Gray)
-                            }
-                            LinearProgressIndicator(progress = uiState.progress)
-                        }
-                    }
-                }
             }
         }
     }
@@ -474,6 +465,29 @@ private fun LogPage(
             )
         ) {
             SmallTitle(text = "日志状态")
+            if (uiState.progressLabel.isNotEmpty() || uiState.isDownloading) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, bottom = 10.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(MiuixTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(text = "进度")
+                                Text(text = uiState.progressLabel.ifEmpty { "--" }, color = Color.Gray)
+                            }
+                            LinearProgressIndicator(progress = uiState.progress)
+                        }
+                    }
+            }
             Column(
                 modifier = Modifier
                     .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
