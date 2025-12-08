@@ -1711,7 +1711,13 @@ public class XHSDownloader {
                     if (postDetails != null) {
                         // Parse the post details to extract media URLs
                         List<String> mediaUrls = parsePostDetails(postDetails);
-                        return mediaUrls.size(); // Return number of media items found
+                        int count = mediaUrls.size();
+                        // 如果启用了 Live Photo 合成，则每对图+视频最终只生成一个文件，进度应按合成后的数量计算
+                        if (shouldCreateLivePhotos() && this.livePhotoPairs != null && !this.livePhotoPairs.isEmpty()) {
+                            count -= this.livePhotoPairs.size(); // 每对减少一次计数
+                            if (count < 0) count = 0;
+                        }
+                        return count; // Return number of resulting media items
                     } else {
                         Log.e(TAG, "Failed to fetch post details for media count: " + url);
                     }
