@@ -39,6 +39,9 @@
     <string name="token_index_padded">Index (two digits)</string>
     <string name="token_download_timestamp">Download start timestamp</string>
     <string name="webview_title">Fetch Via WebView</string>
+    <string name="webview_enter_url">Enter a URL</string>
+    <string name="webview_go">Go</string>
+    <string name="webview_crawl">Crawl</string>
     <string name="no_urls_found_javascript_null">No URLs found on the page (JavaScript returned null)</string>
     <string name="no_accessible_urls_found">No accessible URLs found on the page</string>
     <string name="error_parsing_urls">Error parsing URLs: %1$s</string>

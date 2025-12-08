@@ -1,0 +1,337 @@
+package com.neoruaa.xhsdn
+
+import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Intent
+import android.content.res.Configuration
+import android.graphics.Bitmap
+import android.os.Build
+import android.os.Bundle
+import android.webkit.WebChromeClient
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.icons.useful.Back
+import top.yukonga.miuix.kmp.theme.ColorSchemeMode
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.theme.ThemeController
+
+class WebViewActivity : ComponentActivity() {
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(lightScrim = android.graphics.Color.TRANSPARENT, darkScrim = android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.auto(lightScrim = android.graphics.Color.TRANSPARENT, darkScrim = android.graphics.Color.TRANSPARENT)
+        )
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.navigationBarDividerColor = android.graphics.Color.TRANSPARENT
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
+        val isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightNavigationBars = !isNightMode
+
+        val initialUrl = intent?.getStringExtra("url")
+        setContent {
+            val controller = ThemeController(ColorSchemeMode.System)
+            MiuixTheme(controller = controller) {
+                WebViewScreen(
+                    initialUrl = initialUrl,
+                    onBack = { finish() },
+                    onResult = { urls, content ->
+                        val resultIntent = Intent().apply {
+                            putStringArrayListExtra("image_urls", ArrayList(urls))
+                            if (content.isNotEmpty()) {
+                                putExtra("content_text", content)
+                            }
+                        }
+                        setResult(Activity.RESULT_OK, resultIntent)
+                        finish()
+                    }
+                )
+            }
+        }
+    }
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun WebViewScreen(
+    initialUrl: String?,
+    onBack: () -> Unit,
+    onResult: (List<String>, String) -> Unit
+) {
+    val context = LocalContext.current
+    var urlText by remember { mutableStateOf(TextFieldValue(initialUrl ?: "")) }
+    var loading by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf(0) }
+
+    val topBarState = rememberTopAppBarState()
+    val scrollBehavior = top.yukonga.miuix.kmp.basic.MiuixScrollBehavior(state = topBarState)
+
+    val webView = remember {
+        WebView(context).apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.cacheMode = WebSettings.LOAD_DEFAULT
+            settings.userAgentString = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+    }
+
+    DisposableEffect(webView) {
+        onDispose { webView.destroy() }
+    }
+
+    Scaffold(
+        contentWindowInsets = WindowInsets.statusBars.union(WindowInsets.displayCutout),
+        topBar = {
+            TopAppBar(
+                title = context.getString(R.string.webview_title),
+                navigationIcon = {
+                    Icon(
+                        imageVector = MiuixIcons.Useful.Back,
+                        contentDescription = "返回",
+                        modifier = Modifier
+                            .padding(start = 26.dp)
+                            .clickable { onBack() }
+                    )
+                },
+                scrollBehavior = scrollBehavior
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                .background(MiuixTheme.colorScheme.surface)
+                .padding(padding)
+                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                TextField(
+                    value = urlText,
+                    onValueChange = { urlText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = context.getString(R.string.webview_enter_url),
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions.Default.copy(imeAction = ImeAction.Go),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { loadUrl(webView, urlText.text) })
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = { loadUrl(webView, urlText.text) },
+                        modifier = Modifier.weight(1f),
+                        enabled = urlText.text.isNotBlank(),
+                    ) {
+                        Text(
+                            text = context.getString(R.string.webview_go)
+                        )
+                    }
+                    Button(
+                        onClick = {
+                            extractImages(context, webView, onResult)
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = !loading,
+                        colors = ButtonDefaults.buttonColorsPrimary()
+                    ) {
+                        Text(
+                            text = context.getString(R.string.webview_crawl),
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(horizontal = 16.dp)
+                    .background(MiuixTheme.colorScheme.background, RoundedCornerShape(18.dp))
+            ) {
+
+
+                if (loading) {
+                    LinearProgressIndicator(
+                        progress = progress / 100f,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .align(Alignment.TopCenter),
+                        color = MiuixTheme.colorScheme.primary
+                    )
+                } else {
+                    androidx.compose.ui.viewinterop.AndroidView(
+                        factory = { webView.apply { layoutParams = android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT) } },
+                        modifier = Modifier
+    //                        .padding(6.dp)
+                            .fillMaxSize(),
+
+                        update = { }
+                    )
+                }
+            }
+        }
+    }
+
+    DisposableEffect(Unit) {
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                loading = true
+                url?.let { urlText = TextFieldValue(it) }
+            }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                loading = false
+            }
+        }
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                progress = newProgress
+            }
+        }
+        if (!initialUrl.isNullOrBlank()) {
+            loadUrl(webView, initialUrl)
+        } else {
+            webView.loadUrl("about:blank")
+        }
+        onDispose { }
+    }
+}
+
+private fun loadUrl(webView: WebView, raw: String) {
+    var url = raw.trim()
+    if (url.isEmpty()) return
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        url = "https://$url"
+    }
+    webView.loadUrl(url)
+}
+
+private fun extractImages(
+    context: android.content.Context,
+    webView: WebView,
+    onResult: (List<String>, String) -> Unit
+) {
+    webView.postDelayed({
+        val jsCode = readAssetFile(context, "xhs_extractor.js") ?: run {
+            Toast.makeText(context, context.getString(R.string.no_urls_found_javascript_null), Toast.LENGTH_SHORT).show()
+            return@postDelayed
+        }
+        webView.evaluateJavascript(jsCode) { result ->
+            try {
+                if (result == null || result == "null" || result.isEmpty()) {
+                    Toast.makeText(context, context.getString(R.string.no_urls_found_javascript_null), Toast.LENGTH_SHORT).show()
+                    return@evaluateJavascript
+                }
+                var cleanResult = result
+                if (cleanResult.startsWith("\"") && cleanResult.endsWith("\"")) {
+                    cleanResult = cleanResult.substring(1, cleanResult.length - 1)
+                        .replace("\\\"", "\"")
+                        .replace("\\\\", "\\")
+                        .replace("\\n", "\n")
+                        .replace("\\r", "\r")
+                        .replace("\\t", "\t")
+                }
+                val json = org.json.JSONObject(cleanResult)
+                val urlsArray = json.getJSONArray("urls")
+                val contentObj = json.optJSONObject("content")
+                val contentText = contentObj?.optString("content", "") ?: ""
+
+                val allUrls = mutableListOf<String>()
+                for (i in 0 until urlsArray.length()) {
+                    val url = urlsArray.getString(i)
+                    if (url.isNullOrEmpty()) continue
+                    if (url.startsWith("http") && !url.startsWith("blob:") && !url.startsWith("data:")) {
+                        allUrls.add(url)
+                    }
+                }
+
+                if (contentText.isNotEmpty()) {
+                    val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                    val clip = android.content.ClipData.newPlainText("Content", contentText)
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(context, context.getString(R.string.desc_copied), Toast.LENGTH_SHORT).show()
+                }
+
+                if (allUrls.isNotEmpty()) {
+                    onResult(allUrls, contentText)
+                } else {
+                    Toast.makeText(context, context.getString(R.string.no_accessible_urls_found), Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(context, context.getString(R.string.error_parsing_urls, e.message ?: ""), Toast.LENGTH_LONG).show()
+            }
+        }
+    }, 10)
+}
+
+private fun readAssetFile(context: android.content.Context, fileName: String): String? {
+    return try {
+        context.assets.open(fileName).bufferedReader().use { it.readText() }
+    } catch (_: Exception) {
+        null
+    }
+}
