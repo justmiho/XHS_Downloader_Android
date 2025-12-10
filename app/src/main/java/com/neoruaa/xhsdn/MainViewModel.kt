@@ -143,6 +143,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             appendStatus("网页未发现可下载的资源")
             return
         }
+        downloadedCount = 0
+        totalMediaCount = urls.size
+        _uiState.update {
+            it.copy(
+                isDownloading = true,
+                progressLabel = "",
+                progress = 0f,
+                showWebCrawl = false
+            )
+        }
+        updateProgress()
         appendStatus("网页模式发现 ${urls.size} 条资源，开始转存")
         content?.takeIf { it.isNotEmpty() }?.let {
             appendStatus("已复制网页文案")
@@ -156,6 +167,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         viewModelScope.launch(Dispatchers.Main) {
                             if (displayedFiles.add(filePath)) {
                                 addMedia(filePath)
+                                downloadedCount++
+                                updateProgress()
                             }
                         }
                     }
@@ -179,8 +192,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 downloader.downloadFile(transformed, fileName)
             }
             withContext(Dispatchers.Main) {
+                updateProgress()
                 appendStatus("网页转存完成")
-                _uiState.update { it.copy(showWebCrawl = false) }
+                _uiState.update { it.copy(showWebCrawl = false, isDownloading = false) }
             }
         }
     }

@@ -334,6 +334,7 @@ private fun MainScreen(
                 uiState = uiState,
                 statusListState = statusListState,
                 scrollBehavior = scrollBehavior,
+                onOpenWeb = onOpenWeb,
                 modifier = Modifier
                     .fillMaxSize()
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
@@ -449,6 +450,7 @@ private fun HomePage(
 @Composable
 private fun LogPage(
     uiState: MainUiState,
+    onOpenWeb: () -> Unit,
     statusListState: androidx.compose.foundation.lazy.LazyListState,
     scrollBehavior: ScrollBehavior,
     modifier: Modifier = Modifier
@@ -490,7 +492,7 @@ private fun LogPage(
             }
             Column(
                 modifier = Modifier
-                    .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+                    .padding(start = 16.dp, end = 16.dp, bottom = 10.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .background(MiuixTheme.colorScheme.surfaceVariant)
             ) {
@@ -519,6 +521,17 @@ private fun LogPage(
                     }
                 }
 
+            }
+            if (uiState.showWebCrawl) {
+                    Button(
+                        onClick = onOpenWeb,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp),
+                        colors = ButtonDefaults.buttonColors()
+                    ) {
+                        Text("JSON 解析失败？试试网页模式")
+                    }
             }
         }
     }
