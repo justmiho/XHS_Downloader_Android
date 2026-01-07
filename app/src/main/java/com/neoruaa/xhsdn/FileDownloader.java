@@ -200,17 +200,20 @@ public class FileDownloader {
                         long totalBytesRead = 0;
                         long contentLength = body.contentLength();
                         
+                        // Track the last progress update to enable more frequent updates
+                        long lastProgressUpdate = 0;
                         InputStream inputStream = body.byteStream();
                         while ((bytesRead = inputStream.read(buffer)) != -1) {
                             outputStream.write(buffer, 0, bytesRead);
                             totalBytesRead += bytesRead;
-                            
-                            // Report progress updates less frequently to avoid UI thread contention
+
+                            // Report progress updates more frequently for better user experience
                             if (callback != null && contentLength > 0) {
                                 // Only report progress if we have a content length and it's not 0
-                                // Limit progress updates to once per 256KB to avoid excessive callbacks
-                                if (totalBytesRead % 262144 == 0 || totalBytesRead == contentLength) { // 256KB = 262144 bytes
+                                // Update progress every 64KB or when download completes to balance responsiveness and performance
+                                if (totalBytesRead - lastProgressUpdate >= 65536 || totalBytesRead == contentLength) { // 64KB = 65536 bytes
                                     callback.onDownloadProgressUpdate(totalBytesRead, contentLength);
+                                    lastProgressUpdate = totalBytesRead;
                                 }
                             }
                         }
@@ -310,16 +313,19 @@ public class FileDownloader {
             long totalBytesRead = 0;
             long contentLength = body.contentLength();
             
+            // Track the last progress update to enable more frequent updates
+            long lastProgressUpdate = 0;
             while ((bytesRead = inputStream.read(buffer)) != -1) {
                 outputStream.write(buffer, 0, bytesRead);
                 totalBytesRead += bytesRead;
-                
-                // Report progress updates less frequently to avoid UI thread contention
+
+                // Report progress updates more frequently for better user experience
                 if (callback != null && contentLength > 0) {
                     // Only report progress if we have a content length and it's not 0
-                    // Limit progress updates to once per 256KB to avoid excessive callbacks
-                    if (totalBytesRead % 262144 == 0 || totalBytesRead == contentLength) { // 256KB = 262144 bytes
+                    // Update progress every 64KB or when download completes to balance responsiveness and performance
+                    if (totalBytesRead - lastProgressUpdate >= 65536 || totalBytesRead == contentLength) { // 64KB = 65536 bytes
                         callback.onDownloadProgressUpdate(totalBytesRead, contentLength);
+                        lastProgressUpdate = totalBytesRead;
                     }
                 }
             }

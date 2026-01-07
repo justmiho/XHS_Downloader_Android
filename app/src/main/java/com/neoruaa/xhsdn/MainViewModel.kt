@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.util.Locale
 
 data class MediaItem(val path: String, val type: MediaType)
@@ -28,6 +27,7 @@ data class MainUiState(
     val isDownloading: Boolean = false,
     val progressLabel: String = "",
     val progress: Float = 0f,
+    val downloadProgressText: String = "0%｜0kb/s", // Format: "XX%｜XXXkb/s"
     val showWebCrawl: Boolean = false,
     val showVideoWarning: Boolean = false
 )
@@ -42,6 +42,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var currentUrl: String? = null
     private var hasUserContinuedAfterVideoWarning = false
     private var downloadJob: kotlinx.coroutines.Job? = null
+
+    // Track individual file progress for more accurate overall progress
+    private val fileProgressMap = mutableMapOf<String, Float>() // Maps file path to progress (0.0 to 1.0)
+    private var currentFileProgress = 0f // Progress of the currently downloading file (0.0 to 1.0)
+
+    // Fields to track download progress and speed for the first callback
+    private var currentDownloadStartTime: Long = 0
+    private var currentDownloadStartBytes: Long = 0
+    private var currentDownloadTotalBytes: Long = 0
+    private var currentDownloadedBytes: Long = 0
+    private var lastSpeedCalculationTime: Long = 0
+    private var lastCalculatedSpeed = "0kb/s"
+
+    private fun formatSpeed(bytesPerSecond: Double): String {
+        return when {
+            bytesPerSecond >= 1024 * 1024 -> { // >= 1 MB/s
+                val mbps = bytesPerSecond / (1024 * 1024)
+                "${String.format("%.2f", mbps)}MB/s"
+            }
+            bytesPerSecond >= 1024 -> { // >= 1 KB/s
+                val kbps = bytesPerSecond / 1024
+                "${String.format("%.1f", kbps)}KB/s"
+            }
+            else -> {
+                "${bytesPerSecond.toInt()}B/s"
+            }
+        }
+    }
+
+    private fun resetDownloadTracking() {
+        currentDownloadStartTime = System.currentTimeMillis()
+        currentDownloadStartBytes = 0
+        currentDownloadTotalBytes = 0
+        currentDownloadedBytes = 0
+        lastSpeedCalculationTime = 0
+        lastCalculatedSpeed = "0KB/s"
+
+        // Update UI to show initial state
+        _uiState.update { currentState ->
+            currentState.copy(downloadProgressText = "0.0%｜0KB/s")
+        }
+    }
 
     fun updateUrl(value: String) {
         _uiState.update { it.copy(urlInput = value, showWebCrawl = false) }
@@ -59,6 +101,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         downloadedCount = 0
         totalMediaCount = 0
         displayedFiles.clear()
+
+        // Reset download tracking variables
+        resetDownloadTracking()
+
         _uiState.update {
             it.copy(
                 isDownloading = true,
@@ -83,6 +129,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             if (displayedFiles.add(filePath)) {
                                 addMedia(filePath)
                                 downloadedCount++
+                                currentFileProgress = 0f // Reset current file progress when file is completed
                                 updateProgress()
                             }
                         }
@@ -93,7 +140,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     override fun onDownloadProgressUpdate(downloaded: Long, total: Long) {
-                        // 保留单个文件进度供后续扩展
+                        // Calculate progress percentage - always update this
+                        val progressPercent = if (total > 0) {
+                            (downloaded.toDouble() / total.toDouble() * 100).toFloat()
+                        } else 0f
+
+                        // Calculate individual file progress (0.0 to 1.0)
+                        currentFileProgress = if (total > 0) {
+                            downloaded.toFloat() / total.toFloat()
+                        } else {
+                            0f
+                        }
+
+                        // Calculate download speed more responsively
+                        val currentTime = System.currentTimeMillis()
+                        val deltaTime = currentTime - lastSpeedCalculationTime
+
+                        // Update speed calculation more frequently for better responsiveness
+                        if (deltaTime > 500) { // Update every 0.5 seconds instead of 1 second
+                            val deltaBytes = downloaded - currentDownloadedBytes
+                            val deltaTimeSec = deltaTime.toDouble() / 1000.0 // Convert to seconds
+
+                            val speedBps = if (deltaTimeSec > 0) {
+                                deltaBytes.toDouble() / deltaTimeSec
+                            } else 0.0
+
+                            // Format speed with appropriate units (KB/s or MB/s)
+                            lastCalculatedSpeed = formatSpeed(speedBps)
+                            lastSpeedCalculationTime = currentTime
+                        }
+
+                        // Update the current download stats
+                        currentDownloadedBytes = downloaded
+                        currentDownloadTotalBytes = total
+
+                        // Update overall progress
+                        updateProgress()
+
+                        // Always update UI state with current progress and speed
+                        val progressText = "${String.format("%.1f", progressPercent)}%｜$lastCalculatedSpeed"
+                        _uiState.update { currentState ->
+                            currentState.copy(downloadProgressText = progressText)
+                        }
                     }
 
                     override fun onDownloadError(status: String, originalUrl: String) {
@@ -140,6 +228,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             withContext(Dispatchers.Main) {
                 val jobStillActive = downloadJob?.isActive == true
                 if (jobStillActive) {
+                    // Reset download tracking when download completes
+                    resetDownloadTracking()
                     _uiState.update { it.copy(isDownloading = false) }
                     if (!success) {
                         appendStatus("下载失败，请检查链接或网络")
@@ -182,6 +272,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         downloadedCount = 0
         totalMediaCount = urls.size
+
+        // Reset download tracking variables for web crawl
+        resetDownloadTracking()
+
         _uiState.update {
             it.copy(
                 isDownloading = true,
@@ -206,6 +300,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             if (displayedFiles.add(filePath)) {
                                 addMedia(filePath)
                                 downloadedCount++
+                                currentFileProgress = 0f // Reset current file progress when file is completed
                                 updateProgress()
                             }
                         }
@@ -215,7 +310,50 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         appendStatus(status)
                     }
 
-                    override fun onDownloadProgressUpdate(downloaded: Long, total: Long) {}
+                    override fun onDownloadProgressUpdate(downloaded: Long, total: Long) {
+                        // Calculate progress percentage - always update this
+                        val progressPercent = if (total > 0) {
+                            (downloaded.toDouble() / total.toDouble() * 100).toFloat()
+                        } else 0f
+
+                        // Calculate individual file progress (0.0 to 1.0)
+                        currentFileProgress = if (total > 0) {
+                            downloaded.toFloat() / total.toFloat()
+                        } else {
+                            0f
+                        }
+
+                        // Calculate download speed more responsively
+                        val currentTime = System.currentTimeMillis()
+                        val deltaTime = currentTime - lastSpeedCalculationTime
+
+                        // Update speed calculation more frequently for better responsiveness
+                        if (deltaTime > 500) { // Update every 0.5 seconds instead of 1 second
+                            val deltaBytes = downloaded - currentDownloadedBytes
+                            val deltaTimeSec = deltaTime.toDouble() / 1000.0 // Convert to seconds
+
+                            val speedBps = if (deltaTimeSec > 0) {
+                                deltaBytes.toDouble() / deltaTimeSec
+                            } else 0.0
+
+                            // Format speed with appropriate units (KB/s or MB/s)
+                            lastCalculatedSpeed = formatSpeed(speedBps)
+                            lastSpeedCalculationTime = currentTime
+                        }
+
+                        // Update the current download stats
+                        currentDownloadedBytes = downloaded
+                        currentDownloadTotalBytes = total
+
+                        // Update overall progress
+                        updateProgress()
+
+                        // Always update UI state with current progress and speed
+                        val progressText = "${String.format("%.1f", progressPercent)}%｜$lastCalculatedSpeed"
+                        _uiState.update { currentState ->
+                            currentState.copy(downloadProgressText = progressText)
+                        }
+                    }
 
                     override fun onDownloadError(status: String, originalUrl: String) {
                         appendStatus("错误：$status ($originalUrl)")
@@ -237,7 +375,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             // Reset the stop flag for new download
             downloader.resetStopDownload()
-            val postId = currentUrl?.let { downloader.extractPostId(it) } ?: "webview"
+            // Extract all valid XHS URLs from the input
+            val url: List<String>? = downloader.extractLinks(currentUrl)
+            val postIdTemp: String = url?.let { downloader.extractPostId(it.firstOrNull()) } ?: currentDownloadStartTime.toString()
+            val postId = "webview_$postIdTemp"
             urls.forEachIndexed { index, rawUrl ->
                 val transformed = downloader.transformXhsCdnUrl(rawUrl).takeUnless { it.isNullOrEmpty() } ?: rawUrl
                 val extension = determineFileExtension(transformed)
@@ -247,6 +388,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             withContext(Dispatchers.Main) {
                 updateProgress()
                 appendStatus("网页转存完成")
+                // Reset download tracking when download completes
+                resetDownloadTracking()
                 _uiState.update { it.copy(showWebCrawl = false, isDownloading = false) }
                 // Reset the flag after download completes (whether successful or not)
                 hasUserContinuedAfterVideoWarning = false
@@ -350,12 +493,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             "$downloadedCount/?"
         }
-        val fraction = if (totalMediaCount > 0) {
-            downloadedCount.toFloat() / totalMediaCount
+        val overallProgress = if (totalMediaCount > 0) {
+            // Calculate progress as (completed files + current file progress) / total files
+            (downloadedCount + currentFileProgress) / totalMediaCount.toFloat()
         } else {
             0f
         }
-        _uiState.update { it.copy(progressLabel = label, progress = fraction) }
+        _uiState.update { it.copy(progressLabel = label, progress = overallProgress) }
     }
 
     private fun appendStatus(message: String) {

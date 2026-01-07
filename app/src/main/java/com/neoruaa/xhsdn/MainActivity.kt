@@ -493,10 +493,16 @@ private fun LogPage(
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(text = "进度")
-                            Text(text = uiState.progressLabel.ifEmpty { "--" }, color = Color.Gray)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(text = "进度  ")
+                                Text(text = uiState.progressLabel.ifEmpty { "--" }, color = Color.Gray)
+                            }
+                            Text(text = uiState.downloadProgressText, color = Color.Gray)
                         }
                         LinearProgressIndicator(progress = uiState.progress)
                     }
