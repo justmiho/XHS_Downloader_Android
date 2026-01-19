@@ -445,6 +445,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun removeMediaItem(mediaItem: MediaItem) {
+        _uiState.update { state ->
+            state.copy(mediaItems = state.mediaItems.filter { it.path != mediaItem.path })
+        }
+    }
+
     private fun runDownloadWithCancellationCheck(downloader: XHSDownloader, targetUrl: String): Boolean {
         // Create a thread to run the download
         var result = false

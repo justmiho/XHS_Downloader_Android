@@ -98,14 +98,15 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
 import android.util.Size
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import top.yukonga.miuix.kmp.icon.basic.SearchCleanup
 import top.yukonga.miuix.kmp.icon.extended.Download
-import top.yukonga.miuix.kmp.icon.extended.Edit
+import top.yukonga.miuix.kmp.icon.extended.Delete
 import top.yukonga.miuix.kmp.icon.extended.Info
 import top.yukonga.miuix.kmp.icon.extended.Link
 import top.yukonga.miuix.kmp.icon.extended.Play
 import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.extra.SuperDialog
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -139,6 +140,10 @@ class MainActivity : ComponentActivity() {
                     onOpenWeb = { openWebCrawl(uiState.urlInput) },
                     onContinueDownload = { viewModel.continueAfterVideoWarning() },
                     onMediaClick = { openFile(it) },
+                    onDeleteMedia = { mediaItem ->
+                        // 从UI状态中移除该项目
+                        viewModel.removeMediaItem(mediaItem)
+                    },
                     selectedTab = selectedTab,
                     onTabChange = { selectedTab = it },
                     scrollBehavior = scrollBehavior,
@@ -275,6 +280,7 @@ private fun MainScreen(
     onOpenWeb: () -> Unit,
     onContinueDownload: () -> Unit,
     onMediaClick: (MediaItem) -> Unit,
+    onDeleteMedia: (MediaItem) -> Unit,
     selectedTab: Int,
     onTabChange: (Int) -> Unit,
     scrollBehavior: ScrollBehavior,
@@ -349,6 +355,7 @@ private fun MainScreen(
             else -> DownloadsPage(
                 uiState = uiState,
                 onMediaClick = onMediaClick,
+                onDeleteMedia = onDeleteMedia,
                 scrollBehavior = scrollBehavior,
                 modifier = Modifier
                     .fillMaxSize()
@@ -585,6 +592,7 @@ private fun LogPage(
 private fun DownloadsPage(
     uiState: MainUiState,
     onMediaClick: (MediaItem) -> Unit,
+    onDeleteMedia: (MediaItem) -> Unit,
     scrollBehavior: ScrollBehavior,
     modifier: Modifier = Modifier
 ) {
@@ -623,7 +631,11 @@ private fun DownloadsPage(
                         .nestedScroll(scrollBehavior.nestedScrollConnection)
                 ) {
                     items(uiState.mediaItems) { item ->
-                        MediaPreview(item = item, onClick = { onMediaClick(item) })
+                        MediaPreview(
+                            item = item,
+                            onClick = { onMediaClick(item) },
+                            onDelete = onDeleteMedia
+                        )
                     }
                 }
             }
@@ -632,9 +644,12 @@ private fun DownloadsPage(
 }
 
 @Composable
-private fun MediaPreview(item: MediaItem, onClick: () -> Unit) {
+private fun MediaPreview(item: MediaItem, onClick: () -> Unit, onDelete: (MediaItem) -> Unit) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
     val bitmap = rememberThumbnail(item)
     val aspectRatio = rememberAspectRatio(item) ?: 0.75f
+    val fileName = remember(item.path) { File(item.path).name }
+
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(18.dp))
@@ -657,20 +672,81 @@ private fun MediaPreview(item: MediaItem, onClick: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            val fileName = File(item.path).name
-            Text(
-                text = fileName,
-                modifier = Modifier.weight(1f),
-                maxLines = 1
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                if (item.type == MediaType.VIDEO) {
+                    Icon(
+                        imageVector = MiuixIcons.Play,
+                        contentDescription = "播放",
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                val fileSize = remember(item.path) {
+                    val file = File(item.path)
+                    if (file.exists()) {
+                        val size = file.length()
+                        when {
+                            size > 1024 * 1024 * 1024 -> "%.2f GB".format(size / (1024.0 * 1024.0 * 1024.0))
+                            size > 1024 * 1024 -> "%.1f MB".format(size / (1024.0 * 1024.0))
+                            size > 1024 -> "%.1f KB".format(size / 1024.0)
+                            else -> "$size B"
+                        }
+                    } else {
+                        "--"
+                    }
+                }
+                Text(
+                    text = fileSize,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1
+                )
+            }
+            Icon(
+                imageVector = MiuixIcons.Delete,
+                contentDescription = "删除",
+                modifier = Modifier
+                    .size(20.dp)
+                    .clickable { showDeleteDialog = true }
             )
-            if (item.type == MediaType.VIDEO) {
-                Icon(
-                    imageVector = MiuixIcons.Play,
-                    contentDescription = "播放",
-                    modifier = Modifier.size(20.dp)
+        }
+    }
+
+    if (showDeleteDialog) {
+        SuperDialog(
+            title = "删除文件",
+            summary = "是否删除 \"$fileName\" 媒体文件？",
+            show = remember { mutableStateOf(true) },
+            onDismissRequest = { showDeleteDialog = false }
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.padding(top = 8.dp)
+            ) {
+                TextButton(
+                    text = "取消",
+                    onClick = { showDeleteDialog = false },
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(12.dp))
+                TextButton(
+                    text = "删除",
+                    onClick = {
+                        // 删除文件
+                        val file = File(item.path)
+                        if (file.exists()) {
+                            file.delete()
+                        }
+                        onDelete(item) // 调用删除回调
+                        showDeleteDialog = false
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColorsPrimary()
                 )
             }
         }
