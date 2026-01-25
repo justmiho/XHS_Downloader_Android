@@ -65,6 +65,7 @@ import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.ThemeController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.max
 import com.kyant.capsule.ContinuousRoundedRectangle
 
 class WebViewActivity : ComponentActivity() {
@@ -136,6 +137,13 @@ private fun WebViewScreen(
             settings.displayZoomControls = false
             settings.useWideViewPort = true
             settings.loadWithOverviewMode = true
+            // 允许混合内容（HTTP和HTTPS）
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+            }
+            // 允许明文内容
+            settings.allowUniversalAccessFromFileURLs = true
+            settings.allowFileAccessFromFileURLs = true
             setInitialScale(80)
         }
     }
@@ -168,7 +176,7 @@ private fun WebViewScreen(
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .background(MiuixTheme.colorScheme.surface)
                 .padding(padding)
-                .padding(bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()),
+                .padding(bottom = max(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(), 16.dp)),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Column(
