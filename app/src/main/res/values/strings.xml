@@ -67,4 +67,5 @@
     <string name="overall_download_progress">Overall download progress: %1$d%%</string>
     <string name="items_completed">items completed</string>
     <string name="items_remaining">items remaining</string>
+    <string name="accessibility_service_description">Enable this utility to allow XHS Downloader to monitor your clipboard in the background, automatically detect Xiaohongshu links, and start downloading.</string>
 </resources>

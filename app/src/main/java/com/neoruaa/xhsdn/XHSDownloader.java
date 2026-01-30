@@ -1144,7 +1144,7 @@ public class XHSDownloader {
                         }
                     }
                     
-                    // Check for corresponding Live Photo video
+                    // Check for Live Photo video stream
                     String livePhotoVideoUrl = null;
                     if (image.has("stream")) {
                         JSONObject stream = image.getJSONObject("stream");
@@ -1161,16 +1161,15 @@ public class XHSDownloader {
                         }
                     }
                     
-                    // Add to media pairs - either paired or as single image
+                    // Add to media pairs - either Live Photo pair or single image
                     if (imageUrl != null) {
                         if (livePhotoVideoUrl != null) {
-                            Log.d(TAG, "Matched live photo: image=" + imageUrl + ", video=" + livePhotoVideoUrl);
-                            mediaPairs.add(new MediaPair(imageUrl, livePhotoVideoUrl, true)); // paired live photo with original URLs
-                            // For live photos, we don't trigger video warning since they are legitimate image+video pairs
-                            // Mark that videos have been detected but don't show warning
+                            // Has stream field = Live Photo
+                            Log.d(TAG, "Live Photo detected: image=" + imageUrl + ", video=" + livePhotoVideoUrl);
+                            mediaPairs.add(new MediaPair(imageUrl, livePhotoVideoUrl, true));
                             videosDetected = true;
                         } else {
-                            mediaPairs.add(new MediaPair(imageUrl, null, false)); // single image with original URL
+                            mediaPairs.add(new MediaPair(imageUrl, null, false)); // single image
                         }
                     }
                 }

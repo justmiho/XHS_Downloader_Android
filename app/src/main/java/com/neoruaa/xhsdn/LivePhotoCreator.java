@@ -24,6 +24,18 @@ public class LivePhotoCreator {
                    " (size: " + imageFile.length() + " bytes) and video: " + videoFile.getAbsolutePath() + 
                    " (size: " + videoFile.length() + " bytes) -> output: " + outputFile.getAbsolutePath());
             
+            // Always convert image to JPEG format using BitmapFactory
+            // This handles WebP, PNG, or any other format that Android can decode
+            File jpegFile = new File(imageFile.getParentFile(), 
+                imageFile.getName().replaceAll("\\.[^.]+$", "") + "_converted.jpg");
+            
+            Log.d(TAG, "Converting image to JPEG: " + jpegFile.getAbsolutePath());
+            if (!convertToJpeg(imageFile, jpegFile)) {
+                Log.e(TAG, "Failed to convert image to JPEG");
+                return false;
+            }
+            Log.d(TAG, "Successfully converted to JPEG: " + jpegFile.getAbsolutePath() + " (size: " + jpegFile.length() + " bytes)");
+            
             // Read the video file size
             long videoSize = videoFile.length();
             
@@ -34,7 +46,14 @@ public class LivePhotoCreator {
             byte[] xmpSegment = createXmpApp1Segment(xmpData);
             
             // Create the live photo using streaming approach to avoid memory issues
-            return createLivePhotoStreaming(imageFile, videoFile, outputFile, xmpSegment);
+            boolean result = createLivePhotoStreaming(jpegFile, videoFile, outputFile, xmpSegment);
+            
+            // Clean up temporary JPEG file
+            if (jpegFile.exists()) {
+                jpegFile.delete();
+            }
+            
+            return result;
             
         } catch (Exception e) {
             Log.e(TAG, "Error creating live photo: " + e.getMessage());
@@ -43,6 +62,78 @@ public class LivePhotoCreator {
             if (outputFile.exists()) {
                 outputFile.delete();
             }
+            return false;
+        }
+    }
+    
+    /**
+     * Convert any image to JPEG format using Android's BitmapFactory
+     * This handles WebP, PNG, JPEG (re-encode), and any other supported format
+     */
+    private static boolean convertToJpeg(File inputFile, File jpegFile) {
+        try {
+            // Decode the image using Android's BitmapFactory (supports many formats)
+            android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeFile(inputFile.getAbsolutePath());
+            if (bitmap == null) {
+                Log.e(TAG, "Failed to decode image: " + inputFile.getAbsolutePath());
+                return false;
+            }
+            
+            Log.d(TAG, "Decoded image: " + bitmap.getWidth() + "x" + bitmap.getHeight());
+            
+            // Compress as JPEG with high quality
+            try (FileOutputStream fos = new FileOutputStream(jpegFile)) {
+                boolean success = bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, fos);
+                bitmap.recycle();
+                return success;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error converting to JPEG: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Check if a file is in WebP format by reading its magic bytes
+     * WebP files start with "RIFF" followed by file size and "WEBP"
+     */
+    private static boolean isWebPFormat(File file) {
+        try (FileInputStream fis = new FileInputStream(file)) {
+            byte[] header = new byte[12];
+            int bytesRead = fis.read(header);
+            if (bytesRead < 12) {
+                return false;
+            }
+            // Check for RIFF header and WEBP signature
+            boolean isRiff = header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F';
+            boolean isWebP = header[8] == 'W' && header[9] == 'E' && header[10] == 'B' && header[11] == 'P';
+            return isRiff && isWebP;
+        } catch (Exception e) {
+            Log.e(TAG, "Error checking WebP format: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Convert a WebP image to JPEG format
+     */
+    private static boolean convertWebPToJpeg(File webpFile, File jpegFile) {
+        try {
+            // Decode WebP using Android's BitmapFactory
+            android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeFile(webpFile.getAbsolutePath());
+            if (bitmap == null) {
+                Log.e(TAG, "Failed to decode WebP image");
+                return false;
+            }
+            
+            // Compress as JPEG with high quality
+            try (FileOutputStream fos = new FileOutputStream(jpegFile)) {
+                boolean success = bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 95, fos);
+                bitmap.recycle();
+                return success;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error converting WebP to JPEG: " + e.getMessage());
             return false;
         }
     }

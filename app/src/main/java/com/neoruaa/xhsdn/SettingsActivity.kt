@@ -6,7 +6,13 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import android.text.TextUtils
+import android.content.ComponentName
+import android.content.Context
 import android.graphics.Color as AndroidColor
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -72,6 +78,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.TopAppBarState
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import androidx.compose.ui.unit.sp
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -87,7 +94,10 @@ data class SettingsUiState(
     val createLivePhotos: Boolean = true,
     val useCustomNaming: Boolean = false,
     val template: TextFieldValue = TextFieldValue(NamingFormat.DEFAULT_TEMPLATE),
-    val tokens: List<NamingFormat.TokenDefinition> = emptyList()
+    val tokens: List<NamingFormat.TokenDefinition> = emptyList(),
+    val debugNotificationEnabled: Boolean = false,
+    val showClipboardBubble: Boolean = true,
+    val autoReadClipboard: Boolean = false
 )
 
 class SettingsViewModel(private val prefs: SharedPreferences) : ViewModel() {
@@ -104,13 +114,21 @@ class SettingsViewModel(private val prefs: SharedPreferences) : ViewModel() {
         if (template.isNullOrEmpty()) {
             template = NamingFormat.DEFAULT_TEMPLATE
         }
+        val debugNotificationEnabled = prefs.getBoolean("debug_notification_enabled", false)
+        val showClipboardBubble = prefs.getBoolean("show_clipboard_bubble", true) // Default true
+        val autoReadClipboard = prefs.getBoolean("auto_read_clipboard", false)
         return SettingsUiState(
             createLivePhotos = createLivePhotos,
             useCustomNaming = useCustomNaming,
             template = TextFieldValue(template),
-            tokens = NamingFormat.getAvailableTokens()
+            tokens = NamingFormat.getAvailableTokens(),
+            debugNotificationEnabled = debugNotificationEnabled,
+            showClipboardBubble = showClipboardBubble,
+            autoReadClipboard = autoReadClipboard
         )
     }
+
+
 
     fun onCreateLivePhotosChange(enabled: Boolean) = updateState {
         it.copy(createLivePhotos = enabled).also { newState ->
@@ -136,12 +154,35 @@ class SettingsViewModel(private val prefs: SharedPreferences) : ViewModel() {
         }
     }
 
+
+
+    fun onDebugNotificationChange(enabled: Boolean) = updateState {
+        it.copy(debugNotificationEnabled = enabled).also { newState ->
+            persist(newState)
+        }
+    }
+
+    fun onShowClipboardBubbleChange(enabled: Boolean) = updateState {
+        it.copy(showClipboardBubble = enabled).also { newState ->
+            persist(newState)
+        }
+    }
+
+    fun onAutoReadClipboardChange(enabled: Boolean) = updateState {
+        it.copy(autoReadClipboard = enabled).also { newState ->
+            persist(newState)
+        }
+    }
+
     private fun persist(state: SettingsUiState) {
         hasChanges = true
         prefs.edit()
             .putBoolean("create_live_photos", state.createLivePhotos)
             .putBoolean("use_custom_naming_format", state.useCustomNaming)
             .putString("custom_naming_template", state.template.text.ifBlank { NamingFormat.DEFAULT_TEMPLATE })
+            .putBoolean("debug_notification_enabled", state.debugNotificationEnabled)
+            .putBoolean("show_clipboard_bubble", state.showClipboardBubble)
+            .putBoolean("auto_read_clipboard", state.autoReadClipboard)
             .remove("use_metadata_file_names")
             .apply()
     }
@@ -205,10 +246,23 @@ class SettingsActivity : ComponentActivity() {
                     onUseCustomNamingChange = viewModel::onUseCustomNamingChange,
                     onTemplateChange = viewModel::onTemplateChange,
                     onResetTemplate = viewModel::onResetTemplate,
+                    onDebugNotificationChange = viewModel::onDebugNotificationChange,
+                    onShowClipboardBubbleChange = viewModel::onShowClipboardBubbleChange,
+                    onAutoReadClipboardChange = viewModel::onAutoReadClipboardChange,
+
                     topBarState = topBarState
                 )
             }
         }
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        checkAccessibilityState()
+    }
+    
+    private fun checkAccessibilityState() {
+        // No-op
     }
 
     private fun finishWithResult() {
@@ -226,6 +280,9 @@ private fun SettingsScreen(
     onUseCustomNamingChange: (Boolean) -> Unit,
     onTemplateChange: (TextFieldValue) -> Unit,
     onResetTemplate: () -> Unit,
+    onDebugNotificationChange: (Boolean) -> Unit,
+    onShowClipboardBubbleChange: (Boolean) -> Unit,
+    onAutoReadClipboardChange: (Boolean) -> Unit,
     topBarState: top.yukonga.miuix.kmp.basic.TopAppBarState
 ) {
     val context = LocalContext.current
@@ -275,9 +332,42 @@ private fun SettingsScreen(
                             checked = uiState.createLivePhotos,
                             onCheckedChange = onCreateLivePhotosChange
                         )
+                        PreferenceRow(
+                            title = "调试通知",
+                            description = "显示详细的下载调试信息",
+                            checked = uiState.debugNotificationEnabled,
+                            onCheckedChange = onDebugNotificationChange
+                        )
                     }
                 }
             }
+            
+            item {
+                SmallTitle(text = "剪贴板")
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp),
+                    cornerRadius = 18.dp,
+                    colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.background)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        PreferenceRow(
+                            title = "显示剪贴板气泡",
+                            description = "检测到链接时显示提示卡片",
+                            checked = uiState.showClipboardBubble,
+                            onCheckedChange = onShowClipboardBubbleChange
+                        )
+                        PreferenceRow(
+                            title = "自动读取剪贴板并下载",
+                            description = "检测到链接时自动开始下载",
+                            checked = uiState.autoReadClipboard,
+                            onCheckedChange = onAutoReadClipboardChange
+                        )
+                    }
+                }
+            }
+            
             item {
                 SmallTitle(text = "文件命名")
                 Card(
