@@ -84,6 +84,8 @@ import java.io.File
 import android.media.MediaMetadataRetriever
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.platform.LocalDensity
 import com.neoruaa.xhsdn.MediaItem
 import com.neoruaa.xhsdn.MediaType
@@ -98,7 +100,8 @@ import top.yukonga.miuix.kmp.icon.extended.Play
 data class DetailUiState(
     val mediaItems: List<MediaItem> = emptyList(),
     val taskTitle: String = "",
-    val isDownloading: Boolean = false
+    val isDownloading: Boolean = false,
+    val noteContent: String? = null
 )
 
 class DetailViewModel : ViewModel() {
@@ -115,17 +118,19 @@ class DetailActivity : ComponentActivity() {
         private const val EXTRA_TASK_ID = "task_id"
         private const val EXTRA_TASK_TITLE = "task_title"
         private const val EXTRA_FILE_PATHS = "file_paths"
+        private const val EXTRA_NOTE_CONTENT = "note_content"
 
-        fun newIntent(context: Context, taskId: String, taskTitle: String, filePaths: List<String>): Intent {
+        fun newIntent(context: Context, taskId: String, taskTitle: String, filePaths: List<String>, noteContent: String? = null): Intent {
             return Intent(context, DetailActivity::class.java).apply {
                 putExtra(EXTRA_TASK_ID, taskId)
                 putExtra(EXTRA_TASK_TITLE, taskTitle)
                 putStringArrayListExtra(EXTRA_FILE_PATHS, ArrayList(filePaths))
+                putExtra(EXTRA_NOTE_CONTENT, noteContent)
             }
         }
 
-        fun newIntent(context: Context, taskId: Long, taskTitle: String, filePaths: List<String>): Intent {
-            return newIntent(context, taskId.toString(), taskTitle, filePaths)
+        fun newIntent(context: Context, taskId: Long, taskTitle: String, filePaths: List<String>, noteContent: String? = null): Intent {
+            return newIntent(context, taskId.toString(), taskTitle, filePaths, noteContent)
         }
     }
 
@@ -156,11 +161,12 @@ class DetailActivity : ComponentActivity() {
         }
         val isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightNavigationBars = !isNightMode
-        
+
         // 获取传递的数据
         val taskId = intent.getStringExtra(EXTRA_TASK_ID) ?: "0" // 默认值
         val taskTitle = intent.getStringExtra(EXTRA_TASK_TITLE) ?: "详情"
         val filePaths = intent.getStringArrayListExtra(EXTRA_FILE_PATHS) ?: arrayListOf()
+        val noteContent = intent.getStringExtra(EXTRA_NOTE_CONTENT)
 
         // 构建媒体项列表
         val mediaItems = filePaths.map { path ->
@@ -172,7 +178,8 @@ class DetailActivity : ComponentActivity() {
             DetailUiState(
                 mediaItems = mediaItems,
                 taskTitle = "下载详情",
-                isDownloading = false
+                isDownloading = false,
+                noteContent = noteContent
             )
         )
 
@@ -263,17 +270,67 @@ private fun FilesPage(
     onDeleteMedia: (MediaItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val navPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    Card(
-        modifier = modifier,
-        cornerRadius = 18.dp,
-        colors = CardDefaults.defaultColors(
-            color = MiuixTheme.colorScheme.surface
-        )
+    val navPadding = WindowInsets.navigationBars
+        .asPaddingValues()
+        .calculateBottomPadding()
+
+    LazyVerticalStaggeredGrid(
+        columns = StaggeredGridCells.Fixed(2),
+        verticalItemSpacing = 10.dp,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(
+            top = 16.dp,
+            start = 16.dp,
+            end = 16.dp,
+            bottom = 20.dp + navPadding
+        ),
+        modifier = modifier
     ) {
-        SmallTitle(text = "已下载文件")
-        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 0.dp)) {
-            if (uiState.mediaItems.isEmpty()) {
+
+        // ===== 笔记文案（单列 / 满行）=====
+        if (uiState.noteContent != null) {
+            item(span = StaggeredGridItemSpan.FullLine) {
+                SmallTitle(
+                    text = "笔记文案",
+                    insideMargin = PaddingValues(12.dp, 0.dp)
+                )
+            }
+            item(span = StaggeredGridItemSpan.FullLine) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp),
+                    cornerRadius = 18.dp,
+                    colors = CardDefaults.defaultColors(
+                        color = MiuixTheme.colorScheme.background
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        SelectionContainer {
+                            Text(
+                                text = uiState.noteContent,
+                                color = MiuixTheme.colorScheme.onBackground
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // ===== 已下载文件标题（单列 / 满行）=====
+        item(span = StaggeredGridItemSpan.FullLine) {
+            SmallTitle(
+                text = "已下载文件",
+                insideMargin = PaddingValues(12.dp, 0.dp)
+            )
+        }
+
+        // ===== 空态（单列 / 满行）=====
+        if (uiState.mediaItems.isEmpty()) {
+            item(span = StaggeredGridItemSpan.FullLine) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -285,28 +342,20 @@ private fun FilesPage(
                         modifier = Modifier.padding(16.dp)
                     )
                 }
-            } else {
-                LazyVerticalStaggeredGrid(
-                    columns = StaggeredGridCells.Fixed(2),
-                    verticalItemSpacing = 10.dp,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = navPadding + 10.dp),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(bottom = 4.dp)
-                ) {
-                    items(uiState.mediaItems) { item ->
-                        MediaPreview(
-                            item = item,
-                            onClick = { onMediaClick(item) },
-                            onDelete = onDeleteMedia
-                        )
-                    }
-                }
+            }
+        } else {
+            // ===== 真·瀑布流区域（双列）=====
+            items(uiState.mediaItems) { item ->
+                MediaPreview(
+                    item = item,
+                    onClick = { onMediaClick(item) },
+                    onDelete = onDeleteMedia
+                )
             }
         }
     }
 }
+
 
 @Composable
 private fun MediaPreview(item: MediaItem, onClick: () -> Unit, onDelete: (MediaItem) -> Unit) {

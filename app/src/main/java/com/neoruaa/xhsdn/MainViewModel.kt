@@ -165,23 +165,64 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
 
+        // 在协程外部立即创建任务并设置currentTaskId，以便外部可以立即访问
+        val initialTaskId = if (currentTaskId > 0) {
+            // If we already have a task ID (e.g., from copyDescription), update the existing task
+            val existingTask = TaskManager.getTaskById(currentTaskId)
+            if (existingTask != null) {
+                // Update the existing task with new info
+                TaskManager.updateTask(currentTaskId) { task ->
+                    task.copy(
+                        noteUrl = targetUrl,
+                        noteTitle = task.noteTitle ?: extractTitleFromUrl(targetUrl), // Use existing title or extract from URL
+                        noteType = NoteType.IMAGE,
+                        totalFiles = 1, // We'll update this later after getting the count
+                        status = TaskStatus.QUEUED
+                    )
+                }
+                TaskManager.startTask(currentTaskId)
+                currentTaskId
+            } else {
+                // If somehow the task doesn't exist, create a new one
+                val newTaskId = TaskManager.createTask(
+                    noteUrl = targetUrl,
+                    noteTitle = extractTitleFromUrl(targetUrl),
+                    noteType = NoteType.IMAGE,
+                    totalFiles = 1 // We'll update this later after getting the count
+                )
+                TaskManager.startTask(newTaskId)
+                newTaskId
+            }
+        } else {
+            // Create a new task if no currentTaskId exists
+            val newTaskId = TaskManager.createTask(
+                noteUrl = targetUrl,
+                noteTitle = extractTitleFromUrl(targetUrl),
+                noteType = NoteType.IMAGE,
+                totalFiles = 1 // We'll update this later after getting the count
+            )
+            TaskManager.startTask(newTaskId)
+            newTaskId
+        }
+
+        currentTaskId = initialTaskId
+        // 重置任务跟踪计数器
+        taskCompletedFiles = 0
+        taskFailedFiles = 0
+
         downloadJob = viewModelScope.launch(Dispatchers.IO) {
             totalMediaCount = runCatching { XHSDownloader(getApplication()).getMediaCount(targetUrl) }
                 .getOrElse { 0 }
             updateProgress()
-            
-            // Create task in TaskManager
-            // Default to IMAGE, update later if video detected
-            val noteType = NoteType.IMAGE 
-            val taskId = TaskManager.createTask(
-                noteUrl = targetUrl,
-                noteTitle = null, 
-                noteType = noteType,
-                totalFiles = if (totalMediaCount > 0) totalMediaCount else 1
-            )
-            TaskManager.startTask(taskId)
-            currentTaskId = taskId
-            val myTaskId = taskId // Capture taskId locally for this coroutine
+
+            // Update the task with the actual total file count
+            if (totalMediaCount > 0) {
+                TaskManager.updateTask(initialTaskId) { task ->
+                    task.copy(totalFiles = totalMediaCount)
+                }
+            }
+
+            val myTaskId = initialTaskId // Capture taskId locally for this coroutine
 
             val downloader = XHSDownloader(
                 getApplication(),
@@ -498,6 +539,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (!desc.isNullOrEmpty()) {
                     copyToClipboard(desc)
                     appendStatus("已复制文案：\n$desc")
+
+                    // 如果当前有任务ID，则更新任务的笔记内容
+                    if (currentTaskId > 0) {
+                        val currentTask = TaskManager.getTaskById(currentTaskId)
+                        if (currentTask != null) {
+                            // 创建更新后的任务，保留原有数据但更新笔记内容
+                            val updatedTask = currentTask.copy(noteContent = desc)
+
+                            // 更新TaskManager中的任务
+                            TaskManager.updateTask(currentTaskId) { updatedTask }
+                        }
+                    }
+
                     onResult(desc)
                 } else {
                     appendStatus("未获取到文案")
@@ -828,6 +882,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun appendStatus(message: String) {
         _uiState.update { it.copy(status = it.status + message) }
+    }
+
+    private fun extractTitleFromUrl(url: String): String? {
+        // Extract title from URL if possible, otherwise return null
+        return null // For now, return null - the actual title extraction would happen elsewhere
     }
 
     private fun copyToClipboard(text: String) {

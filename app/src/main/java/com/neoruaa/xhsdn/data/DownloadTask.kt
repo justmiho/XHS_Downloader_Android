@@ -43,7 +43,8 @@ data class DownloadTask(
     val createdAt: Long,           // 创建时间
     val completedAt: Long? = null, // 完成时间
     val errorMessage: String? = null, // 错误信息
-    val filePaths: List<String> = emptyList() // 下载的文件路径列表
+    val filePaths: List<String> = emptyList(), // 下载的文件路径列表
+    val noteContent: String? = null // 笔记内容
 ) {
     val progress: Float
         get() = if (totalFiles > 0) (completedFiles.toFloat() / totalFiles) else 0f
@@ -68,6 +69,7 @@ data class DownloadTask(
             put("completedAt", completedAt ?: 0L)
             put("errorMessage", errorMessage ?: "")
             put("filePaths", JSONArray(filePaths))
+            put("noteContent", noteContent ?: "")
         }
     }
     
@@ -87,7 +89,8 @@ data class DownloadTask(
                 errorMessage = json.optString("errorMessage").takeIf { it.isNotEmpty() },
                 filePaths = json.optJSONArray("filePaths")?.let { array ->
                     (0 until array.length()).map { array.getString(it) }
-                } ?: emptyList()
+                } ?: emptyList(),
+                noteContent = json.optString("noteContent").takeIf { it.isNotEmpty() }
             )
         }
     }
@@ -183,7 +186,8 @@ object TaskManager {
         noteUrl: String,
         noteTitle: String?,
         noteType: NoteType,
-        totalFiles: Int
+        totalFiles: Int,
+        noteContent: String? = null
     ): Long {
         val taskId = nextId++
         val task = DownloadTask(
@@ -193,7 +197,8 @@ object TaskManager {
             noteType = noteType,
             totalFiles = totalFiles,
             status = TaskStatus.QUEUED,
-            createdAt = System.currentTimeMillis()
+            createdAt = System.currentTimeMillis(),
+            noteContent = noteContent
         )
         _tasks.value = _tasks.value + task
         saveTasks()
@@ -318,8 +323,11 @@ object TaskManager {
     fun updateTaskStatus(taskId: Long, status: TaskStatus, errorMessage: String? = null) {
         updateTask(taskId) { it.copy(status = status, errorMessage = errorMessage) }
     }
-    
-    private fun updateTask(taskId: Long, update: (DownloadTask) -> DownloadTask) {
+
+    /**
+     * 通用任务更新函数
+     */
+    fun updateTask(taskId: Long, update: (DownloadTask) -> DownloadTask) {
         _tasks.value = _tasks.value.map { task ->
             if (task.id == taskId) update(task) else task
         }

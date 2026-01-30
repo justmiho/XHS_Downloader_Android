@@ -1,7 +1,6 @@
 package com.neoruaa.xhsdn
 
 import android.Manifest
-import android.R
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -24,7 +23,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,25 +30,13 @@ import androidx.compose.foundation.layout.width
 import com.neoruaa.xhsdn.utils.UrlUtils
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
-import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.runtime.Composable
-import androidx.compose.foundation.gestures.detectTapGestures
-import com.neoruaa.xhsdn.MediaItem
-import com.neoruaa.xhsdn.MediaType
 import com.neoruaa.xhsdn.utils.detectMediaType
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
@@ -58,8 +44,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,53 +53,37 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import android.media.MediaMetadataRetriever
 import kotlinx.coroutines.Dispatchers
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.neoruaa.xhsdn.BuildConfig
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.basic.rememberTopAppBarState
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Download
 import top.yukonga.miuix.kmp.icon.extended.Info
-import top.yukonga.miuix.kmp.icon.extended.Play
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -127,16 +95,12 @@ import androidx.compose.foundation.combinedClickable
 import java.io.File
 import android.util.LruCache
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.derivedStateOf
 import com.kyant.capsule.ContinuousRoundedRectangle
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.extra.LocalWindowListPopupState
 import top.yukonga.miuix.kmp.extra.SuperDialog
 import top.yukonga.miuix.kmp.extra.SuperListPopup
-import top.yukonga.miuix.kmp.extra.WindowListPopup
 import top.yukonga.miuix.kmp.icon.extended.MoreCircle
 
 // 缩略图内存缓存（最多缓存 50 张缩略图）
@@ -312,9 +276,19 @@ class MainActivity : ComponentActivity() {
                             val url = UrlUtils.extractFirstUrl(clipText)
                             if (UrlUtils.isXhsLink(url)) {
                                 viewModel.updateUrl(clipText)
+
+                                // 先开始下载（创建任务）
                                 viewModel.startDownload { showToast(it) }
-                                // 手动下载也清空剪贴板
-                                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("", ""))
+
+                                // 然后获取笔记文案并保存到刚创建的任务中
+                                viewModel.copyDescription(
+                                    onResult = { _ ->
+                                        // 文案已保存到任务中
+                                    },
+                                    onError = { _ ->
+                                        // 即使获取文案失败，也不影响下载
+                                    }
+                                )
                             } else {
                                 showToast("剪贴板中未检测到小红书链接")
                             }
@@ -823,7 +797,8 @@ private fun HistoryPage(
                                         context,
                                         task.id.toString(),
                                         task.noteTitle ?: task.noteUrl,
-                                        task.filePaths
+                                        task.filePaths,
+                                        task.noteContent
                                     )
                                     context.startActivity(intent)
                                 }
@@ -841,7 +816,7 @@ private fun HistoryPage(
                 .padding(start = 24.dp, end = 24.dp, bottom = navPadding + 16.dp)
                 .fillMaxWidth()
                 .clickable(enabled = !uiState.isDownloading) { onDownload() },
-            cornerRadius = 18.dp,
+            cornerRadius = 20.dp,
             colors = CardDefaults.defaultColors(
                 color = if (uiState.isDownloading) MiuixTheme.colorScheme.primaryVariant else MiuixTheme.colorScheme.primary
             )
@@ -921,7 +896,7 @@ private fun HistoryPage(
                 }
                 // 三角形指针（紧贴卡片底部）
                 androidx.compose.foundation.Canvas(
-                    modifier = Modifier.size(24.dp, 14.dp)
+                    modifier = Modifier.size(24.dp, 10.dp)
                 ) {
                     val path = androidx.compose.ui.graphics.Path().apply {
                         moveTo(0f, 0f)
