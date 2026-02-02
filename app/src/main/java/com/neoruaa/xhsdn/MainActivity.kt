@@ -99,6 +99,7 @@ import java.io.File
 import android.util.LruCache
 import androidx.compose.foundation.layout.statusBars
 import com.kyant.capsule.ContinuousRoundedRectangle
+import com.neoruaa.xhsdn.ui.TabRowWithContour
 import com.neoruaa.xhsdn.viewmodels.MainUiState
 import com.neoruaa.xhsdn.viewmodels.MainViewModel
 import com.neoruaa.xhsdn.viewmodels.MediaItem
@@ -106,6 +107,7 @@ import com.neoruaa.xhsdn.viewmodels.MediaType
 import top.yukonga.miuix.kmp.basic.DropdownImpl
 import top.yukonga.miuix.kmp.basic.ListPopupColumn
 import top.yukonga.miuix.kmp.basic.PopupPositionProvider
+import top.yukonga.miuix.kmp.basic.TabRowDefaults
 import top.yukonga.miuix.kmp.extra.SuperDialog
 import top.yukonga.miuix.kmp.extra.SuperListPopup
 import top.yukonga.miuix.kmp.icon.extended.MoreCircle
@@ -803,33 +805,16 @@ private fun HistoryPage(
                 val failedCount = tasks.count { it.status == com.neoruaa.xhsdn.data.TaskStatus.FAILED }
                 val filterLabels = listOf("全部", "等待选择($waitingCount)", "失败($failedCount)")
 
-                Row(
+                TabRowWithContour(
+                    tabs = filterLabels,
+                    selectedTabIndex = selectedFilter,
+                    fontSize = 14.sp,
+                    cornerRadius = 13.dp,
+                    onTabSelected = { selectedFilter = it },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    filterLabels.forEachIndexed { index, label ->
-                        val isSelected = selectedFilter == index
-                        Box(
-                            modifier = Modifier
-                                .clip(ContinuousRoundedRectangle(999.dp))
-                                .background(
-                                    if (isSelected) MiuixTheme.colorScheme.primary
-                                    else MiuixTheme.colorScheme.surfaceVariant
-                                )
-                                .clickable { selectedFilter = index }
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            Text(
-                                text = label,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = if (isSelected) Color.White else MiuixTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
 
                 // 根据筛选条件过滤任务
                 val filteredTasks = when (selectedFilter) {
